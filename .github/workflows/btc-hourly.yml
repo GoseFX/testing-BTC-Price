@@ -22,14 +22,12 @@ jobs:
             echo "Missing DISCORD_WEBHOOK_URL secret" >&2
             exit 1
           fi
-          # Build JSON payload with Python, then POST to Discord
-          python3 - <<'PY' | curl -fsS -X POST -H "Content-Type: application/json" -d @- "$DISCORD_WEBHOOK_URL"
-import json, urllib.request, datetime, ssl
-ctx = ssl.create_default_context()
-with urllib.request.urlopen("https://api.coinbase.com/v2/prices/BTC-USD/spot", context=ctx, timeout=10) as resp:
-    data = json.load(resp)
-price = float(data["data"]["amount"])
-now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-content = f"BTC price: ${price:,.2f} ({now})"
-print(json.dumps({"content": content}))
-PY
+          PRICE=$(curl -fsS https://api.coinbase.com/v2/prices/BTC-USD/spot | jq -r '.data.amount')
+          if [ -z "$PRICE" ] || [ "$PRICE" = "null" ]; then
+            echo "Failed to fetch BTC price" >&2
+            exit 1
+          fi
+          NOW=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          jq -n --arg price "$PRICE" --arg time "$NOW" \
+            '{content: ("BTC price: $" + $price + " (" + $time + ")")}' \
+          | curl -fsS -X POST -H "Content-Type: application/json" -d @- "$DISCORD_WEBHOOK_URL"
